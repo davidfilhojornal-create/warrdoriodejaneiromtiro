@@ -1,0 +1,49 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries:
+      - "internal/game/logic/board"
+      - "internal/game/logic/card"
+      - "internal/game/logic/creation"
+      - "internal/game/logic/mission"
+      - "internal/game/logic/move/attack"
+      - "internal/game/logic/move/cards"
+      - "internal/game/logic/move/deploy"
+      - "internal/game/logic/move/conquer"
+      - "internal/game/logic/move/reinforce"
+      - "internal/game/logic/move/orchestration"
+      - "internal/game/logic/phase"
+      - "internal/game/logic/player"
+      - "internal/game/logic/region"
+      - "internal/game/snapshot"
+      - "internal/game/logic/state"
+    schema: "internal/game/data/sqlc/migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/game/data/sqlc"
+        sql_package: "pgx/v5"
+        emit_interface: true
+    rules:
+      - sqlc/db-prepare
+  - engine: "postgresql"
+    queries:
+      - "internal/lobby/logic/creation"
+      - "internal/lobby/logic/management"
+      - "internal/lobby/logic/state"
+      - "internal/lobby/logic/start"
+    schema: "internal/lobby/data/sqlc/migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/lobby/data/sqlc"
+        sql_package: "pgx/v5"
+        emit_interface: true
+
+rules:
+  - name: postgresql-query-too-costly
+    message: "Query cost estimate is too high"
+    rule: "postgresql.explain.plan.total_cost > 1.0"
+  - name: postgresql-no-seq-scan
+    message: "Query plan results in a sequential scan"
+    rule: "postgresql.explain.plan.node_type == 'Seq Scan'"

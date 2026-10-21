@@ -1,0 +1,49 @@
+repos:
+  # formatting
+  - repo: https://github.com/segmentio/golines
+    rev: v0.13.0
+    hooks:
+      - id: golines
+        args: ["-m", "99"]
+        exclude: "^(mocks/.*|internal/data/(copyfrom|data|models|querier|query.sql)).go$"
+  - repo: https://github.com/TekWizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-imports
+        args: [ "-w" ]
+        exclude: "^(mocks/.*|internal/data/(copyfrom|data|models|querier|query.sql)).go$"
+      - id: go-fumpt
+        args: [ "-w" ]
+        exclude: "^(mocks/.*|internal/data/(copyfrom|data|models|querier|query.sql)).go$"
+  # linting
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.11.3
+    hooks:
+      - id: golangci-lint-full
+  # architecture
+  - repo: local
+    hooks:
+      - id: check-doc-go
+        name: check doc.go coverage
+        entry: scripts/check-doc-go.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+      - id: diagrams-freshness
+        name: architecture diagram freshness
+        entry: make diagrams-check
+        language: system
+        pass_filenames: false
+        files: '^internal/.*\.go$|^cmd/archdiagram/'
+      - id: jsonnet-lint
+        name: jsonnet lint
+        entry: bash -c 'for f in "$@"; do jsonnet-lint -J grafana/lib "$f"; done'
+        language: system
+        types_or: [jsonnet]
+        files: '^grafana/'
+      - id: dashboards-freshness
+        name: dashboard JSON freshness
+        entry: make dashboards-check
+        language: system
+        pass_filenames: false
+        files: '^grafana/'

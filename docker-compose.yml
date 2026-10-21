@@ -1,0 +1,92 @@
+services:
+  db:
+    extends:
+      file: supabase/docker-compose.yml
+      service: db
+  auth:
+    extends:
+      file: supabase/docker-compose.yml
+      service: auth
+  kong:
+    extends:
+      file: supabase/docker-compose.yml
+      service: kong
+
+  sqlc:
+    image: sqlc/sqlc:latest@sha256:b8d1092c720438e093a231e75eba5d55b7696122f390292acabd5b6d3e986a12
+    env_file:
+      - component-test/.env
+    volumes:
+      - ./:/src
+    working_dir: /src
+    command: generate
+
+  mockery:
+    image: vektra/mockery:3.7@sha256:c2f1f3320809009784094d8de0003b5af48a380fcfb2716dc0def3ebc4d12a35
+    volumes:
+      - ./:/src
+    working_dir: /src
+    depends_on:
+      - sqlc
+
+  risk-it:
+    build:
+      context: .
+      dockerfile: docker/component-test/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - component-test/.env
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=risk-it,service.version=0.1.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4318
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+      lgtm:
+        condition: service_started
+
+  lgtm:
+    image: grafana/otel-lgtm:latest@sha256:52a197a4aad6203af126c148c6194472b48f88d5481f246f5d3657023b30ac9f
+    ports:
+      - "3000:3000"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - PROMETHEUS_EXTRA_ARGS=--storage.tsdb.retention.time=6h
+    volumes:
+      - lgtm-data:/data
+      - ./grafana/dashboards/dashboards.yml:/otel-lgtm/grafana/conf/provisioning/dashboards/go-risk-it.yaml
+      - ./grafana/dashboards:/otel-lgtm/go-risk-it-dashboards
+      - ./grafana/provisioning/datasources/tempo.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/tempo.yaml
+      - ${OTELCOL_CONFIG:-./grafana/otelcol-extra.yaml}:/otel-lgtm/otelcol-config.yaml
+      - ./grafana/prometheus/prometheus.yaml:/otel-lgtm/prometheus.yaml
+      - ./grafana/prometheus/recording-rules.yml:/otel-lgtm/prometheus-rules/recording-rules.yml
+      - ./grafana/tempo/tempo-config.yaml:/otel-lgtm/tempo-config.yaml
+      - ./grafana/loki/loki-config.yaml:/otel-lgtm/loki-config.yaml
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1@sha256:e96064f876226d94bb6ce48a4c4b3dd76edba91168ec1ab024e5c4b959310b0f
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:${DATABASE_PASSWORD}@db:5432/postgres?sslmode=disable"
+      PG_EXPORTER_DISABLE_SETTINGS_METRICS: "true"
+    command:
+      - "--no-collector.stat_bgwriter"
+    depends_on:
+      db:
+        condition: service_healthy
+      lgtm:
+        condition: service_started
+
+
+volumes:
+  postgres_data:
+  socket:
+  db-config:
+  lgtm-data:
